@@ -39,15 +39,16 @@ impl<E: Engine> Circuit<E> for BaseCircuite<E>{
 
 fn hash_board<E: RescueEngine, CS: ConstraintSystem<E>>(
     cs: &mut CS,
-     board_in_num: Num<E>,
-     salt: Num<E>, 
-     ) -> Result<Num<E>, SynthesisError> {
-        let params = Bn256RescueParams::new_checked_2_into_1();
-        let result =rescue_hash(cs, &[Num::<E>::get_variable(&board_in_num)], &params)?;
-        const RATE: usize = 1;
-        const WIDTH: usize = 2;
+    board_in_num: Num<E>,
+    salt: Num<E>, 
+    rescue_params: &<E as RescueEngine>::Params,
+) -> Result<Num<E>, SynthesisError> {
+    let hash_input = [board_in_num.unwrap_as_allocated_num()];
+    let result =rescue_hash(cs, &hash_input, rescue_params)?;
+    const RATE: usize = 1;
+    const WIDTH: usize = 2;
 
-     Ok(Num::Variable(result[0]))
+    Ok(Num::from(result[0].clone()))
 }
 
 fn board_plus_salt(){
