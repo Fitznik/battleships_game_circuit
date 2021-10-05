@@ -10,7 +10,7 @@ edition = "2018"
 
 franklin_crypto = { package="franklin-crypto", git = "https://github.com/matter-labs/franklin-crypto.git", branch="beta", features = ["plonk"]}
 rand = "0.4"
-num-bigint = "0.4.2"
+num-bigint = "0.3"
 
 rescue_poseidon = {package = "rescue_poseidon", git = "https://github.com/matter-labs/rescue-poseidon"}
 bellman_ce = {path = "bellman"}

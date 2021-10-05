@@ -55,7 +55,7 @@ version = "0.1.0"
 dependencies = [
  "bellman_ce 0.3.2",
  "franklin-crypto 0.0.5 (git+https://github.com/matter-labs/franklin-crypto.git?branch=beta)",
- "num-bigint 0.4.2",
+ "num-bigint 0.3.3",
  "rand 0.4.6",
  "rescue_poseidon",
 ]
