@@ -1,11 +1,10 @@
-use std::convert::TryInto;
 use franklin_crypto::bellman::{
     pairing::{
         bn256::Bn256,
         Engine,
     
     },
-    PrimeField,
+
 };
  use franklin_crypto::circuit::{
     boolean::{AllocatedBit, Boolean},
@@ -15,16 +14,9 @@ use franklin_crypto::bellman::{
 
 use franklin_crypto::bellman::{Circuit,SynthesisError, ConstraintSystem};
 
-use franklin_crypto::circuit::rescue::rescue_hash;
-
 use franklin_crypto::rescue::{bn256::Bn256RescueParams}; 
-use franklin_crypto::rescue::RescueEngine;
 
-use rescue_poseidon::RescueParams;
-use rescue_poseidon::{generic_hash, CircuitGenericSponge, DomainStrategy, GenericSponge};
-
-
-use franklin_crypto::plonk::circuit::bigint::bigint::{biguint_to_fe};
+use crate::board_tools::*;
 
 trait OptionExt<T> {
     fn grab(&self) -> Result<T, SynthesisError>;
@@ -42,7 +34,7 @@ struct BaseCircuite<E: Engine> {
     commit: Option<E::Fr>,
     salt: Option<E::Fr>,
     pos: Option<E::Fr>,
-    board_pos_for_check: Option<bool>,
+    claimed_value: Option<bool>,
 
 }
 
@@ -53,7 +45,7 @@ impl Circuit<Bn256> for BaseCircuite<Bn256>{
         let commit = AllocatedNum::alloc(cs.namespace(|| "commit"), || self.commit.grab())?;
         let salt = AllocatedNum::alloc(cs.namespace(|| "salt"), || self.salt.grab())?;
         let pos = AllocatedNum::alloc(cs.namespace(|| "pos"), || self.pos.grab())?;
-        let board_pos_for_check = AllocatedBit::alloc(cs.namespace(|| "check posi"), self.board_pos_for_check).unwrap();
+        let claimed_value = AllocatedBit::alloc(cs.namespace(|| "check posi"), self.claimed_value).unwrap();
         let board: Vec<Boolean> = self.board
             .iter()
             .enumerate()
@@ -81,77 +73,19 @@ impl Circuit<Bn256> for BaseCircuite<Bn256>{
             
         )?;
 
-        let mut pos_board = board.board_pos(cs, pos)?;
+        let pos_board = board.board_pos(cs, &pos)?;
+        let check_claimed_value = AllocatedBit::xor(cs.namespace(|| "check commit"), &pos_board.get_variable().unwrap(), &claimed_value)?;
+        let nor_check_claimed_value = AllocatedBit::nor(cs.namespace(|| "nor result"), &check_claimed_value, &check_claimed_value)?;
+        AllocatedBit::alloc_conditionally(
+            cs.namespace(|| "check commmit"),
+            Some(true), 
+            &nor_check_claimed_value
+            
+        )?;
+        
 
 
         Ok(())
     }
 }
 
-fn hash_board<E: RescueEngine, CS: ConstraintSystem<E>>(
-    cs: &mut CS,
-    board_in_alloc_num: AllocatedNum<E>,
-    salt: AllocatedNum<E>, 
-    rescue_params: &<E as RescueEngine>::Params,
-) -> Result<AllocatedNum<E>, SynthesisError> {
-    let result = rescue_hash(cs, &[board_in_alloc_num, salt], rescue_params)?;
-
-    Ok(AllocatedNum::from(result[0].clone()))
-}
-
-
-struct Board{
-    pub square: Vec<Boolean>
-}
-
-fn conditionally_select_boolean<E:Engine, CS: ConstraintSystem<E>>(
-    mut cs: CS,
-    a: &Boolean,
-    b: &Boolean,
-    condition: &Boolean
-)-> Result<Boolean, SynthesisError>{
-    // (condition and a) xor ((not condition) and b)
-    let part1 = Boolean::and(cs.namespace(|| " ..."), &a, &condition)?;
-    let part2 = Boolean::and(cs.namespace(|| " ..."), &b, &condition.not())?;
-    let result = Boolean::xor(cs.namespace(|| " ..."), &part1, &part2)?;
-    Ok(result)
-
-
-}
-
-impl Board{
-    fn board_into_alloc_num<E:Engine, CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<AllocatedNum<E>, SynthesisError> {
-        
-        let board_in_alloc_num = AllocatedNum::pack_bits_to_element(cs.namespace(|| "board into num"), &self.square[..])?;
-
-        // let sub_cs = cs.namespace(|| "zero constant");
-        // let alloc_num_zero = AllocatedNum::<E>::zero(sub_cs)?;
-        // let sub_cs = cs.namespace(|| "zero constant");
-        // let mut board_in_alloc_num = AllocatedNum::<E>::zero(sub_cs)?;
-
-        // for i in 0..100 {
-        //     let sub_cs = cs.namespace(|| "zero constant");
-        //     let boolean_into_alloc_num = AllocatedNum::<E>::conditionally_select( sub_cs, &AllocatedNum::one::<CS>(), &alloc_num_zero, &self.square[i])?;
-        //     let sub_cs = cs.namespace(|| "zero constant");
-        //     board_in_alloc_num = AllocatedNum::<E>::mul(&boolean_into_alloc_num, sub_cs, &biguint_to_fe(BigUint::from((1<<8)as u64)))?;
-
-
-        // }
-
-        Ok(board_in_alloc_num)
-    } 
-
-    fn board_pos<E:Engine, CS: ConstraintSystem<E>>(&self, cs: &mut CS, pos: AllocatedNum<E>)->Result<Boolean, SynthesisError>{
-        let mut result = Boolean::Constant(false);
-        for i in 0..100 {
-            let i_allocated = AllocatedNum::<E>::alloc(cs.namespace(|| "..."), || Ok(E::Fr::from_str(&i.to_string()).unwrap()))?;
-            i_allocated.assert_number(
-            cs.namespace(|| "assert i is a constant"),
-             &E::Fr::from_str(&i.to_string()).unwrap(),
-            )?;
-            let flag = AllocatedNum::equals(cs.namespace(|| "for flag"), &i_allocated , &pos)?;
-            result = conditionally_select_boolean(cs.namespace(|| " "), &Boolean::Is(flag), &self.square[i], &result)?;
-         }
-        Ok(result)
-    }
-}
