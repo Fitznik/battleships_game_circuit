@@ -29,12 +29,13 @@ impl<T: Copy> OptionExt<T> for Option<T> {
 }
 
 #[derive(Clone, Debug)]
-struct BaseCircuite<E: Engine> {
-    board: [Option<bool>; 100],
-    commit: Option<E::Fr>,
-    salt: Option<E::Fr>,
-    pos: Option<E::Fr>,
-    claimed_value: Option<bool>,
+pub struct BaseCircuite<E: Engine> {
+    pub board: [Option<bool>; 100],
+    pub commit: Option<E::Fr>,
+    pub salt: Option<E::Fr>,
+    pub pos_x: Option<E::Fr>,
+    pub pos_y: Option<E::Fr>,
+    pub claimed_value: Option<bool>,
 
 }
 
@@ -44,7 +45,8 @@ impl Circuit<Bn256> for BaseCircuite<Bn256>{
 
         let commit = AllocatedNum::alloc(cs.namespace(|| "commit"), || self.commit.grab())?;
         let salt = AllocatedNum::alloc(cs.namespace(|| "salt"), || self.salt.grab())?;
-        let pos = AllocatedNum::alloc(cs.namespace(|| "pos"), || self.pos.grab())?;
+        let pos_x = AllocatedNum::alloc(cs.namespace(|| "pos_x"), || self.pos_x.grab())?;
+        let pos_y = AllocatedNum::alloc(cs.namespace(|| "pos_y"), || self.pos_y.grab())?;
         let claimed_value = AllocatedBit::alloc(cs.namespace(|| "check posi"), self.claimed_value).unwrap();
         let board: Vec<Boolean> = self.board
             .iter()
@@ -62,24 +64,25 @@ impl Circuit<Bn256> for BaseCircuite<Bn256>{
         };
 
 
-        let board_in_alloc_num = board.board_into_alloc_num(cs)?;
+
+        let board_in_alloc_num = board.board_into_alloc_num(cs, "567890")?;
         let commit_2 = hash_board(cs, board_in_alloc_num, salt, rescue_params)?;
         let check_commit = AllocatedNum::equals(cs.namespace(|| "check commit"), &commit, &commit_2)?;
         let nor_check_commit = AllocatedBit::nor(cs.namespace(|| "nor result"), &check_commit, &check_commit)?;
         AllocatedBit::alloc_conditionally(
-            cs.namespace(|| "check commmit"),
+            cs.namespace(|| "check commmit is true"),
             Some(true), 
             &nor_check_commit
             
         )?;
 
-        let pos_board = board.board_pos(cs, &pos)?;
-        let check_claimed_value = AllocatedBit::xor(cs.namespace(|| "check commit"), &pos_board.get_variable().unwrap(), &claimed_value)?;
-        let nor_check_claimed_value = AllocatedBit::nor(cs.namespace(|| "nor result"), &check_claimed_value, &check_claimed_value)?;
+        let pos_board = board.board_pos(cs, &pos_x, &pos_y, "100")?;
+        let check_claimed_value = AllocatedBit::xor(cs.namespace(|| "check commit 2"), &pos_board.get_variable().unwrap(), &claimed_value)?;
+        // let nor_check_claimed_value = AllocatedBit::nor(cs.namespace(|| "nor result for claimed value"), &check_claimed_value, &check_claimed_value)?;
         AllocatedBit::alloc_conditionally(
-            cs.namespace(|| "check commmit"),
+            cs.namespace(|| "check commit 2 is true"),
             Some(true), 
-            &nor_check_claimed_value
+            &check_claimed_value
             
         )?;
         
